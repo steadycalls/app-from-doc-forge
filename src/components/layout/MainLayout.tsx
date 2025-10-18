@@ -1,8 +1,9 @@
 import { ReactNode, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { auth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -10,13 +11,16 @@ interface MainLayoutProps {
 
 export const MainLayout = ({ children }: MainLayoutProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isChecking, setIsChecking] = useState(true);
+  const { currentOrganization, isLoading: isOrgLoading } = useOrganization();
 
   useEffect(() => {
     const checkAuth = async () => {
       const isAuthenticated = await auth.isAuthenticated();
       if (!isAuthenticated) {
         navigate('/auth');
+        return;
       }
       setIsChecking(false);
     };
@@ -33,7 +37,14 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  if (isChecking) {
+  // Redirect to organization selector if no organization selected (but user is authenticated)
+  useEffect(() => {
+    if (!isChecking && !isOrgLoading && !currentOrganization && location.pathname !== '/select-organization') {
+      navigate('/select-organization');
+    }
+  }, [isChecking, isOrgLoading, currentOrganization, navigate, location.pathname]);
+
+  if (isChecking || isOrgLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
