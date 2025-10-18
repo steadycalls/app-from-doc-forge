@@ -14,6 +14,7 @@ import SEO from "./pages/SEO";
 import SEOKeywords from "./pages/SEOKeywords";
 import Webhooks from "./pages/Webhooks";
 import SOPs from "./pages/SOPs";
+import Settings from "./pages/Settings";
 import ClientDetail from "./pages/ClientDetail";
 import ProjectDetail from "./pages/ProjectDetail";
 import OpportunityDetail from "./pages/OpportunityDetail";
@@ -47,6 +48,7 @@ const App = () => {
             <Route path="/sops" element={<SOPs />} />
             <Route path="/seo" element={<SEO />} />
             <Route path="/seo/keywords" element={<SEOKeywords />} />
+            <Route path="/settings" element={<Settings />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

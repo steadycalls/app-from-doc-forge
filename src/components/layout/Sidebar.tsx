@@ -10,6 +10,7 @@ import {
   Webhook,
   BookOpen,
   Search,
+  Settings,
   LogOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ const navigation = [
   { name: 'Webhooks', href: '/webhooks', icon: Webhook },
   { name: 'SOPs', href: '/sops', icon: BookOpen },
   { name: 'SEO Research', href: '/seo', icon: Search },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 export const Sidebar = () => {
