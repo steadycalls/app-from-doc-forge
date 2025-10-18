@@ -6,14 +6,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface WebhookPayload {
-  event: string;
+interface ProjectWebhookPayload {
+  event: 'project.created' | 'project.updated' | 'project.completed' | 'project.deleted';
   timestamp: string;
-  data: Record<string, any>;
+  data: {
+    id: string;
+    name: string;
+    status?: string;
+    clientId?: string;
+    [key: string]: any;
+  };
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -23,38 +28,25 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse the webhook payload
-    const payload: WebhookPayload = await req.json();
+    const payload: ProjectWebhookPayload = await req.json();
     
-    console.log('Received webhook:', {
+    console.log('Project webhook received:', {
       event: payload.event,
+      projectId: payload.data.id,
+      projectName: payload.data.name,
+      status: payload.data.status,
       timestamp: payload.timestamp,
-      dataKeys: Object.keys(payload.data || {}),
     });
 
-    // Log the webhook to the database (you'll need to create a webhook_logs table)
-    // For now, we'll just acknowledge receipt
-    
-    // You can add custom logic here based on the event type
-    switch (payload.event) {
-      case 'client.created':
-        console.log('New client webhook received:', payload.data);
-        break;
-      case 'project.updated':
-        console.log('Project update webhook received:', payload.data);
-        break;
-      case 'test':
-        console.log('Test webhook received successfully');
-        break;
-      default:
-        console.log('Unknown webhook event:', payload.event);
-    }
+    // Process project-specific webhook logic here
+    // For example: update timelines, notify team members, etc.
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Webhook received successfully',
+        message: 'Project webhook processed successfully',
         event: payload.event,
+        projectId: payload.data.id,
         receivedAt: new Date().toISOString(),
       }),
       {
@@ -63,7 +55,7 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Error processing webhook:', error);
+    console.error('Error processing project webhook:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 

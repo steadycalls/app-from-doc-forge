@@ -1,4 +1,16 @@
 project_id = "sqsxjmvayyygsivqgyzb"
 
-[functions.webhook-receiver]
+[functions.webhook-clients]
+verify_jwt = false
+
+[functions.webhook-projects]
+verify_jwt = false
+
+[functions.webhook-opportunities]
+verify_jwt = false
+
+[functions.webhook-seo]
+verify_jwt = false
+
+[functions.webhook-analytics]
 verify_jwt = false
