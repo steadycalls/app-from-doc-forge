@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { Building2, Mail, Lock, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
-const Auth = () => {
+const Login = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -196,4 +196,4 @@ const Auth = () => {
   );
 };
 
-export default Auth;
+export default Login;

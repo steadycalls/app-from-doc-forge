@@ -19,7 +19,7 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
     const checkAuth = async () => {
       const isAuthenticated = await auth.isAuthenticated();
       if (!isAuthenticated) {
-        navigate('/auth');
+        navigate('/login');
         return;
       }
       setIsChecking(false);
@@ -30,7 +30,7 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
-        navigate('/auth');
+        navigate('/login');
       }
     });
 

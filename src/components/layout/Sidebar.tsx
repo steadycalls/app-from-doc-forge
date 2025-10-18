@@ -52,7 +52,7 @@ export const Sidebar = () => {
     try {
       await auth.signOut();
       toast.success('Logged out successfully');
-      navigate('/auth');
+      navigate('/login');
     } catch (error) {
       toast.error('Failed to log out');
     }
