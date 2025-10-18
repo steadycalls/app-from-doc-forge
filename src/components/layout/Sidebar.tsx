@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button';
 import { auth } from '@/lib/auth';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useEffect, useState } from 'react';
+import type { User } from '@/lib/auth';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -33,12 +35,24 @@ const navigation = [
 export const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const user = auth.getCurrentUser();
+  const [user, setUser] = useState<User | null>(null);
 
-  const handleLogout = () => {
-    auth.logout();
-    toast.success('Logged out successfully');
-    navigate('/auth');
+  useEffect(() => {
+    const fetchUser = async () => {
+      const currentUser = await auth.getCurrentUser();
+      setUser(currentUser);
+    };
+    fetchUser();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      toast.success('Logged out successfully');
+      navigate('/auth');
+    } catch (error) {
+      toast.error('Failed to log out');
+    }
   };
 
   return (

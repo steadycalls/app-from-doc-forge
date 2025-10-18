@@ -3,8 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { auth } from "@/lib/auth";
 import { OrganizationProvider } from "@/contexts/OrganizationContext";
+import { OrganizationSelector } from "@/components/OrganizationSelector";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
@@ -25,8 +25,6 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => {
-  const isAuthenticated = auth.isAuthenticated();
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -35,8 +33,9 @@ const App = () => {
         <BrowserRouter>
           <OrganizationProvider>
             <Routes>
-            <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/auth" replace />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/select-organization" element={<OrganizationSelector />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/clients" element={<Clients />} />
             <Route path="/clients/:id" element={<ClientDetail />} />

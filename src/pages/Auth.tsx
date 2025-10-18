@@ -22,8 +22,10 @@ const Auth = () => {
       const email = formData.get('email') as string;
       const password = formData.get('password') as string;
 
-      auth.login(email, password);
+      await auth.signIn(email, password);
       toast.success('Welcome back!');
+      // Redirect to organization selector or dashboard
+      // The OrganizationProvider will handle redirecting to dashboard if org is already selected
       navigate('/dashboard');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Login failed');
@@ -43,9 +45,10 @@ const Auth = () => {
       const firstName = formData.get('firstName') as string;
       const lastName = formData.get('lastName') as string;
 
-      auth.signup(email, password, firstName, lastName);
-      toast.success('Account created successfully!');
-      navigate('/dashboard');
+      await auth.signUp(email, password, firstName, lastName);
+      toast.success('Account created! Please check your email to verify your account.');
+      // Note: Supabase requires email verification by default
+      // User will need to verify email before they can log in
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Signup failed');
     } finally {
