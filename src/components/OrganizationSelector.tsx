@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Building2, ArrowRight } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
 
 export const OrganizationSelector = () => {
   const navigate = useNavigate();
@@ -12,10 +13,23 @@ export const OrganizationSelector = () => {
   const [selectedOrgId, setSelectedOrgId] = useState<string>('');
 
   useEffect(() => {
-    // If already has a current organization, redirect to dashboard
-    if (currentOrganization && !isLoading) {
-      navigate('/dashboard');
-    }
+    const checkAuthAndOrg = async () => {
+      // Check if user is authenticated
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user && !isLoading) {
+        // Not authenticated, redirect to login
+        navigate('/login');
+        return;
+      }
+
+      // If already has a current organization, redirect to dashboard
+      if (currentOrganization && !isLoading) {
+        navigate('/dashboard');
+      }
+    };
+
+    checkAuthAndOrg();
   }, [currentOrganization, isLoading, navigate]);
 
   const handleSelectOrganization = () => {
