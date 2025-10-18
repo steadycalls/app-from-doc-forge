@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.75.1';
+import { validateWebhookSignature, getWebhookSecret } from '../_shared/webhook-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-signature',
 };
 
 interface ProjectWebhookPayload {
@@ -24,11 +25,25 @@ serve(async (req) => {
   }
 
   try {
+    // Validate webhook signature
+    const signature = req.headers.get('x-webhook-signature');
+    const body = await req.text();
+    const secret = getWebhookSecret();
+
+    const isValid = await validateWebhookSignature(body, signature, secret);
+    if (!isValid) {
+      console.error('Invalid webhook signature');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid signature' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const payload: ProjectWebhookPayload = await req.json();
+    const payload: ProjectWebhookPayload = JSON.parse(body);
     
     console.log('Project webhook received:', {
       event: payload.event,

@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { z } from 'zod';
 
 export interface User {
   id: string;
@@ -8,10 +9,30 @@ export interface User {
   createdAt: string;
 }
 
+// Strong password validation schema
+const passwordSchema = z.string()
+  .min(12, 'Password must be at least 12 characters')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one number')
+  .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
+
+const validatePassword = (password: string): void => {
+  try {
+    passwordSchema.parse(password);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new Error(error.errors[0].message);
+    }
+    throw error;
+  }
+};
+
 export const auth = {
   signIn: async (email: string, password: string): Promise<User> => {
+    // No password validation on sign in - only validate during signup
     if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters');
+      throw new Error('Invalid email or password');
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -47,9 +68,9 @@ export const auth = {
     lastName: string,
     organizationId?: string
   ): Promise<User> => {
-    if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters');
-    }
+    // Validate password strength
+    validatePassword(password);
+    
     if (!email.includes('@')) {
       throw new Error('Please enter a valid email');
     }
