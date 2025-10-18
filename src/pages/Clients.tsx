@@ -7,69 +7,122 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Mail, Phone, Building, Edit, Trash2 } from 'lucide-react';
-import { storage, STORAGE_KEYS } from '@/lib/storage';
+import { Plus, Mail, Phone, Building, Edit, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface Client {
   id: string;
-  companyName: string;
-  firstName: string;
-  lastName: string;
+  company_name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   phone: string;
   status: 'active' | 'inactive' | 'lead';
   tags: string[];
-  createdAt: string;
+  created_at: string;
 }
 
 const Clients = () => {
+  const { currentOrganization } = useOrganization();
   const [clients, setClients] = useState<Client[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const savedClients = storage.get<Client[]>(STORAGE_KEYS.CLIENTS) || [];
-    setClients(savedClients);
-  }, []);
+  const fetchClients = async () => {
+    if (!currentOrganization) return;
+    
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('organization_id', currentOrganization.id)
+      .order('created_at', { ascending: false });
 
-  const saveClients = (updatedClients: Client[]) => {
-    setClients(updatedClients);
-    storage.set(STORAGE_KEYS.CLIENTS, updatedClients);
+    if (error) {
+      toast.error('Failed to load clients');
+      console.error(error);
+    } else {
+      setClients(data || []);
+    }
+    setIsLoading(false);
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+  useEffect(() => {
+    fetchClients();
+  }, [currentOrganization]);
 
-    const clientData: Client = {
-      id: editingClient?.id || crypto.randomUUID(),
-      companyName: formData.get('companyName') as string,
-      firstName: formData.get('firstName') as string,
-      lastName: formData.get('lastName') as string,
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!currentOrganization) return;
+
+    const formData = new FormData(e.currentTarget);
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      toast.error('You must be logged in');
+      return;
+    }
+
+    const clientData = {
+      company_name: formData.get('companyName') as string,
+      first_name: formData.get('firstName') as string,
+      last_name: formData.get('lastName') as string,
       email: formData.get('email') as string,
       phone: formData.get('phone') as string,
       status: formData.get('status') as Client['status'],
       tags: (formData.get('tags') as string).split(',').map(t => t.trim()).filter(Boolean),
-      createdAt: editingClient?.createdAt || new Date().toISOString(),
+      organization_id: currentOrganization.id,
+      user_id: user.id,
     };
 
     if (editingClient) {
-      saveClients(clients.map(c => c.id === editingClient.id ? clientData : c));
-      toast.success('Client updated successfully');
+      const { error } = await supabase
+        .from('clients')
+        .update(clientData)
+        .eq('id', editingClient.id);
+
+      if (error) {
+        toast.error('Failed to update client');
+        console.error(error);
+      } else {
+        toast.success('Client updated successfully');
+        fetchClients();
+      }
     } else {
-      saveClients([...clients, clientData]);
-      toast.success('Client added successfully');
+      const { error } = await supabase
+        .from('clients')
+        .insert(clientData);
+
+      if (error) {
+        toast.error('Failed to add client');
+        console.error(error);
+      } else {
+        toast.success('Client added successfully');
+        fetchClients();
+      }
     }
 
     setIsDialogOpen(false);
     setEditingClient(null);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this client?')) {
-      saveClients(clients.filter(c => c.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this client?')) return;
+
+    const { error } = await supabase
+      .from('clients')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      toast.error('Failed to delete client');
+      console.error(error);
+    } else {
       toast.success('Client deleted successfully');
+      fetchClients();
     }
   };
 
@@ -109,7 +162,7 @@ const Clients = () => {
                         name="companyName"
                         placeholder="Acme Corp"
                         className="pl-10"
-                        defaultValue={editingClient?.companyName}
+                        defaultValue={editingClient?.company_name}
                         required
                       />
                     </div>
@@ -136,7 +189,7 @@ const Clients = () => {
                       id="firstName"
                       name="firstName"
                       placeholder="John"
-                      defaultValue={editingClient?.firstName}
+                      defaultValue={editingClient?.first_name}
                       required
                     />
                   </div>
@@ -146,7 +199,7 @@ const Clients = () => {
                       id="lastName"
                       name="lastName"
                       placeholder="Doe"
-                      defaultValue={editingClient?.lastName}
+                      defaultValue={editingClient?.last_name}
                       required
                     />
                   </div>
@@ -211,7 +264,11 @@ const Clients = () => {
             <CardTitle>All Clients ({clients.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            {clients.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : clients.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-muted-foreground mb-4">No clients yet. Add your first client to get started.</p>
                 <Button onClick={() => setIsDialogOpen(true)} className="gap-2">
@@ -228,13 +285,13 @@ const Clients = () => {
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold text-lg">{client.companyName}</h3>
+                        <h3 className="font-semibold text-lg">{client.company_name}</h3>
                         <Badge variant="outline" className={statusColors[client.status]}>
                           {client.status}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground mb-1">
-                        {client.firstName} {client.lastName}
+                        {client.first_name} {client.last_name}
                       </p>
                       <div className="flex gap-4 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">

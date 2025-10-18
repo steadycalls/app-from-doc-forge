@@ -8,74 +8,137 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, DollarSign, Calendar } from 'lucide-react';
-import { storage, STORAGE_KEYS } from '@/lib/storage';
+import { Plus, Edit, Trash2, DollarSign, Calendar, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface Project {
   id: string;
   name: string;
-  clientId: string;
+  client_id: string;
   status: 'planning' | 'active' | 'completed' | 'on-hold';
   priority: 'low' | 'medium' | 'high';
   budget: number;
-  startDate: string;
-  endDate: string;
+  start_date: string;
+  deadline: string;
   description: string;
-  createdAt: string;
+  created_at: string;
 }
 
 const Projects = () => {
+  const { currentOrganization } = useOrganization();
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const savedProjects = storage.get<Project[]>(STORAGE_KEYS.PROJECTS) || [];
-    const savedClients = storage.get<any[]>(STORAGE_KEYS.CLIENTS) || [];
-    setProjects(savedProjects);
-    setClients(savedClients);
-  }, []);
+  const fetchData = async () => {
+    if (!currentOrganization) return;
+    
+    setIsLoading(true);
+    const [projectsRes, clientsRes] = await Promise.all([
+      supabase
+        .from('projects')
+        .select('*')
+        .eq('organization_id', currentOrganization.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('clients')
+        .select('*')
+        .eq('organization_id', currentOrganization.id)
+    ]);
 
-  const saveProjects = (updatedProjects: Project[]) => {
-    setProjects(updatedProjects);
-    storage.set(STORAGE_KEYS.PROJECTS, updatedProjects);
+    if (projectsRes.error) {
+      toast.error('Failed to load projects');
+      console.error(projectsRes.error);
+    } else {
+      setProjects(projectsRes.data || []);
+    }
+
+    if (clientsRes.error) {
+      console.error(clientsRes.error);
+    } else {
+      setClients(clientsRes.data || []);
+    }
+    setIsLoading(false);
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+  useEffect(() => {
+    fetchData();
+  }, [currentOrganization]);
 
-    const projectData: Project = {
-      id: editingProject?.id || crypto.randomUUID(),
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!currentOrganization) return;
+
+    const formData = new FormData(e.currentTarget);
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      toast.error('You must be logged in');
+      return;
+    }
+
+    const projectData = {
       name: formData.get('name') as string,
-      clientId: formData.get('clientId') as string,
+      client_id: formData.get('clientId') as string,
       status: formData.get('status') as Project['status'],
       priority: formData.get('priority') as Project['priority'],
       budget: parseFloat(formData.get('budget') as string) || 0,
-      startDate: formData.get('startDate') as string,
-      endDate: formData.get('endDate') as string,
+      start_date: formData.get('startDate') as string,
+      deadline: formData.get('deadline') as string,
       description: formData.get('description') as string,
-      createdAt: editingProject?.createdAt || new Date().toISOString(),
+      organization_id: currentOrganization.id,
+      user_id: user.id,
     };
 
     if (editingProject) {
-      saveProjects(projects.map(p => p.id === editingProject.id ? projectData : p));
-      toast.success('Project updated successfully');
+      const { error } = await supabase
+        .from('projects')
+        .update(projectData)
+        .eq('id', editingProject.id);
+
+      if (error) {
+        toast.error('Failed to update project');
+        console.error(error);
+      } else {
+        toast.success('Project updated successfully');
+        fetchData();
+      }
     } else {
-      saveProjects([...projects, projectData]);
-      toast.success('Project added successfully');
+      const { error } = await supabase
+        .from('projects')
+        .insert(projectData);
+
+      if (error) {
+        toast.error('Failed to add project');
+        console.error(error);
+      } else {
+        toast.success('Project added successfully');
+        fetchData();
+      }
     }
 
     setIsDialogOpen(false);
     setEditingProject(null);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this project?')) {
-      saveProjects(projects.filter(p => p.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this project?')) return;
+
+    const { error } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      toast.error('Failed to delete project');
+      console.error(error);
+    } else {
       toast.success('Project deleted successfully');
+      fetchData();
     }
   };
 
@@ -126,14 +189,14 @@ const Projects = () => {
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="clientId">Client</Label>
-                    <Select name="clientId" defaultValue={editingProject?.clientId} required>
+                    <Select name="clientId" defaultValue={editingProject?.client_id} required>
                       <SelectTrigger>
                         <SelectValue placeholder="Select client" />
                       </SelectTrigger>
                       <SelectContent>
                         {clients.map((client) => (
                           <SelectItem key={client.id} value={client.id}>
-                            {client.companyName}
+                            {client.company_name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -185,17 +248,17 @@ const Projects = () => {
                       id="startDate"
                       name="startDate"
                       type="date"
-                      defaultValue={editingProject?.startDate}
+                      defaultValue={editingProject?.start_date}
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="endDate">End Date</Label>
+                    <Label htmlFor="deadline">Deadline</Label>
                     <Input
-                      id="endDate"
-                      name="endDate"
+                      id="deadline"
+                      name="deadline"
                       type="date"
-                      defaultValue={editingProject?.endDate}
+                      defaultValue={editingProject?.deadline}
                     />
                   </div>
                 </div>
@@ -229,7 +292,11 @@ const Projects = () => {
             <CardTitle>All Projects ({projects.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            {projects.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : projects.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-muted-foreground mb-4">No projects yet. Create your first project.</p>
                 <Button onClick={() => setIsDialogOpen(true)} className="gap-2">
@@ -240,14 +307,14 @@ const Projects = () => {
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 {projects.map((project) => {
-                  const client = clients.find(c => c.id === project.clientId);
+                  const client = clients.find(c => c.id === project.client_id);
                   return (
                     <Card key={project.id} className="border-border/50 hover:border-primary/50 transition-all">
                       <CardHeader>
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
                             <CardTitle className="text-xl mb-2">{project.name}</CardTitle>
-                            <p className="text-sm text-muted-foreground">{client?.companyName || 'Unknown Client'}</p>
+                            <p className="text-sm text-muted-foreground">{client?.company_name || 'Unknown Client'}</p>
                           </div>
                           <div className="flex gap-1">
                             <Button
@@ -289,10 +356,10 @@ const Projects = () => {
                               ${project.budget.toLocaleString()}
                             </span>
                           )}
-                          {project.startDate && (
+                          {project.start_date && (
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              {new Date(project.startDate).toLocaleDateString()}
+                              {new Date(project.start_date).toLocaleDateString()}
                             </span>
                           )}
                         </div>

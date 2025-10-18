@@ -7,63 +7,115 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Edit, Trash2, FileText } from 'lucide-react';
-import { storage, STORAGE_KEYS } from '@/lib/storage';
+import { Plus, Edit, Trash2, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface Note {
   id: string;
   title: string;
   content: string;
   tags: string[];
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
 }
 
 const Notes = () => {
+  const { currentOrganization } = useOrganization();
   const [notes, setNotes] = useState<Note[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const savedNotes = storage.get<Note[]>(STORAGE_KEYS.NOTES) || [];
-    setNotes(savedNotes);
-  }, []);
+  const fetchNotes = async () => {
+    if (!currentOrganization) return;
+    
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('organization_id', currentOrganization.id)
+      .order('updated_at', { ascending: false });
 
-  const saveNotes = (updatedNotes: Note[]) => {
-    setNotes(updatedNotes);
-    storage.set(STORAGE_KEYS.NOTES, updatedNotes);
+    if (error) {
+      toast.error('Failed to load notes');
+      console.error(error);
+    } else {
+      setNotes(data || []);
+    }
+    setIsLoading(false);
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+  useEffect(() => {
+    fetchNotes();
+  }, [currentOrganization]);
 
-    const noteData: Note = {
-      id: editingNote?.id || crypto.randomUUID(),
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!currentOrganization) return;
+
+    const formData = new FormData(e.currentTarget);
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      toast.error('You must be logged in');
+      return;
+    }
+
+    const noteData = {
       title: formData.get('title') as string,
       content: formData.get('content') as string,
       tags: (formData.get('tags') as string).split(',').map(t => t.trim()).filter(Boolean),
-      createdAt: editingNote?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      organization_id: currentOrganization.id,
+      user_id: user.id,
     };
 
     if (editingNote) {
-      saveNotes(notes.map(n => n.id === editingNote.id ? noteData : n));
-      toast.success('Note updated successfully');
+      const { error } = await supabase
+        .from('notes')
+        .update(noteData)
+        .eq('id', editingNote.id);
+
+      if (error) {
+        toast.error('Failed to update note');
+        console.error(error);
+      } else {
+        toast.success('Note updated successfully');
+        fetchNotes();
+      }
     } else {
-      saveNotes([...notes, noteData]);
-      toast.success('Note added successfully');
+      const { error } = await supabase
+        .from('notes')
+        .insert(noteData);
+
+      if (error) {
+        toast.error('Failed to add note');
+        console.error(error);
+      } else {
+        toast.success('Note added successfully');
+        fetchNotes();
+      }
     }
 
     setIsDialogOpen(false);
     setEditingNote(null);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this note?')) {
-      saveNotes(notes.filter(n => n.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this note?')) return;
+
+    const { error } = await supabase
+      .from('notes')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      toast.error('Failed to delete note');
+      console.error(error);
+    } else {
       toast.success('Note deleted successfully');
+      fetchNotes();
     }
   };
 
@@ -138,7 +190,11 @@ const Notes = () => {
             <CardTitle>All Notes ({notes.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            {notes.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : notes.length === 0 ? (
               <div className="text-center py-12">
                 <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground mb-4">No notes yet. Create your first note.</p>
@@ -156,7 +212,7 @@ const Notes = () => {
                         <div className="flex-1 min-w-0">
                           <CardTitle className="text-lg mb-2 line-clamp-1">{note.title}</CardTitle>
                           <p className="text-xs text-muted-foreground">
-                            Updated {new Date(note.updatedAt).toLocaleDateString()}
+                            Updated {new Date(note.updated_at).toLocaleDateString()}
                           </p>
                         </div>
                         <div className="flex gap-1">
