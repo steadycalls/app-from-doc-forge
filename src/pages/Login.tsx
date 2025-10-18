@@ -10,23 +10,25 @@ import { auth } from '@/lib/auth';
 import { toast } from 'sonner';
 import { Building2, Mail, Lock, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useOrganization } from '@/hooks/useOrganization';
 
 const Login = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const { currentOrganization, isLoading: orgLoading } = useOrganization();
 
-  // Redirect if already authenticated
+  // Redirect only if already authenticated AND an organization is selected
   useEffect(() => {
     const checkAuth = async () => {
       const isAuthenticated = await auth.isAuthenticated();
-      if (isAuthenticated) {
+      if (isAuthenticated && !orgLoading && currentOrganization) {
         navigate('/dashboard');
       }
     };
     checkAuth();
-  }, [navigate]);
+  }, [navigate, orgLoading, currentOrganization]);
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
