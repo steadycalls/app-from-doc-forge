@@ -5,46 +5,67 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, Edit, Calendar, DollarSign, Users, FileText } from 'lucide-react';
-import { storage, STORAGE_KEYS } from '@/lib/storage';
+import { ArrowLeft, Edit, Calendar, DollarSign, TrendingUp, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface Project {
-  id: string;
-  name: string;
-  description: string;
-  clientId: string;
-  status: 'planning' | 'in-progress' | 'completed' | 'on-hold';
-  budget: number;
-  startDate: string;
-  endDate: string;
-  progress: number;
-  createdAt: string;
-}
+import { supabase } from '@/integrations/supabase/client';
+import { useOrganization } from '@/hooks/useOrganization';
 
 const ProjectDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [project, setProject] = useState<Project | null>(null);
+  const { currentOrganization } = useOrganization();
+  const [project, setProject] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const projects = (storage.get(STORAGE_KEYS.PROJECTS) || []) as Project[];
-    const foundProject = projects.find((p: Project) => p.id === id);
-    
-    if (!foundProject) {
-      toast.error('Project not found');
-      navigate('/projects');
-      return;
-    }
-    
-    setProject(foundProject);
+    const fetchData = async () => {
+      if (!currentOrganization || !id) return;
+      
+      setIsLoading(true);
 
-    // Load client details
-    const clients = (storage.get(STORAGE_KEYS.CLIENTS) || []) as any[];
-    const projectClient = clients.find((c: any) => c.id === foundProject.clientId);
-    setClient(projectClient);
-  }, [id, navigate]);
+      // Fetch project
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', id)
+        .eq('organization_id', currentOrganization.id)
+        .single();
+
+      if (projectError) {
+        toast.error('Project not found');
+        navigate('/projects');
+        return;
+      }
+
+      setProject(projectData);
+
+      // Fetch associated client
+      if (projectData.client_id) {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', projectData.client_id)
+          .single();
+
+        setClient(clientData);
+      }
+
+      setIsLoading(false);
+    };
+
+    fetchData();
+  }, [id, currentOrganization, navigate]);
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (!project) {
     return null;
@@ -52,11 +73,11 @@ const ProjectDetail = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'planning': return 'secondary';
-      case 'in-progress': return 'default';
-      case 'completed': return 'outline';
-      case 'on-hold': return 'destructive';
-      default: return 'secondary';
+      case 'active': return 'bg-success';
+      case 'completed': return 'bg-primary';
+      case 'on-hold': return 'bg-warning';
+      case 'planning': return 'bg-info';
+      default: return 'bg-muted';
     }
   };
 
@@ -71,23 +92,20 @@ const ProjectDetail = () => {
         </div>
 
         <div className="flex items-start justify-between">
-          <div className="flex-1">
+          <div>
             <h1 className="text-3xl font-bold mb-2">{project.name}</h1>
-            <p className="text-muted-foreground">{project.description}</p>
+            {project.description && (
+              <p className="text-muted-foreground mb-4">{project.description}</p>
+            )}
             {client && (
-              <Button
-                variant="link"
-                className="px-0 mt-2"
-                onClick={() => navigate(`/clients/${client.id}`)}
-              >
-                <Users className="h-4 w-4 mr-2" />
-                {client.name} - {client.company}
-              </Button>
+              <p className="text-sm text-muted-foreground">
+                Client: <span className="font-medium">{client.company_name}</span>
+              </p>
             )}
           </div>
           <div className="flex gap-2">
-            <Badge variant={getStatusColor(project.status)}>
-              {project.status.replace('-', ' ')}
+            <Badge variant="outline" className={getStatusColor(project.status)}>
+              {project.status}
             </Badge>
             <Button onClick={() => navigate('/projects')}>
               <Edit className="h-4 w-4 mr-2" />
@@ -96,101 +114,93 @@ const ProjectDetail = () => {
           </div>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-6 md:grid-cols-4">
           <Card className="p-6">
             <div className="flex items-center gap-3 text-muted-foreground mb-2">
               <DollarSign className="h-5 w-5" />
               <span className="text-sm font-medium">Budget</span>
             </div>
-            <p className="text-2xl font-bold">${project.budget.toLocaleString()}</p>
+            <p className="text-2xl font-bold">${project.budget?.toLocaleString() || 0}</p>
           </Card>
-          
+
           <Card className="p-6">
             <div className="flex items-center gap-3 text-muted-foreground mb-2">
               <Calendar className="h-5 w-5" />
               <span className="text-sm font-medium">Start Date</span>
             </div>
-            <p className="text-lg font-semibold">{new Date(project.startDate).toLocaleDateString()}</p>
+            <p className="text-2xl font-bold">
+              {project.start_date ? new Date(project.start_date).toLocaleDateString() : 'Not set'}
+            </p>
           </Card>
 
           <Card className="p-6">
             <div className="flex items-center gap-3 text-muted-foreground mb-2">
               <Calendar className="h-5 w-5" />
-              <span className="text-sm font-medium">End Date</span>
+              <span className="text-sm font-medium">Deadline</span>
             </div>
-            <p className="text-lg font-semibold">{new Date(project.endDate).toLocaleDateString()}</p>
+            <p className="text-2xl font-bold">
+              {project.deadline ? new Date(project.deadline).toLocaleDateString() : 'Not set'}
+            </p>
           </Card>
 
           <Card className="p-6">
             <div className="flex items-center gap-3 text-muted-foreground mb-2">
-              <FileText className="h-5 w-5" />
+              <TrendingUp className="h-5 w-5" />
               <span className="text-sm font-medium">Progress</span>
             </div>
-            <div className="flex items-baseline gap-2">
-              <p className="text-2xl font-bold">{project.progress}%</p>
-            </div>
+            <p className="text-2xl font-bold">{project.progress || 0}%</p>
           </Card>
         </div>
 
         <Card className="p-6">
-          <h3 className="font-semibold mb-4">Project Progress</h3>
-          <Progress value={project.progress} className="h-3" />
-          <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-            <span>Started: {new Date(project.startDate).toLocaleDateString()}</span>
-            <span>Due: {new Date(project.endDate).toLocaleDateString()}</span>
-          </div>
+          <h3 className="text-lg font-semibold mb-4">Project Progress</h3>
+          <Progress value={project.progress || 0} className="h-2" />
+          <p className="text-sm text-muted-foreground mt-2">
+            {project.progress || 0}% Complete
+          </p>
         </Card>
 
         <div className="grid gap-6 md:grid-cols-2">
           <Card className="p-6">
-            <h3 className="font-semibold mb-4">Timeline</h3>
+            <h3 className="text-lg font-semibold mb-4">Timeline</h3>
             <div className="space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="h-2 w-2 rounded-full bg-primary mt-2" />
-                <div className="flex-1">
-                  <p className="font-medium">Project Created</p>
-                  <p className="text-sm text-muted-foreground">
-                    {new Date(project.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Start Date</span>
+                <span className="font-medium">
+                  {project.start_date ? new Date(project.start_date).toLocaleDateString() : 'Not set'}
+                </span>
               </div>
-              <div className="flex items-start gap-4">
-                <div className="h-2 w-2 rounded-full bg-primary mt-2" />
-                <div className="flex-1">
-                  <p className="font-medium">Start Date</p>
-                  <p className="text-sm text-muted-foreground">
-                    {new Date(project.startDate).toLocaleDateString()}
-                  </p>
-                </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Deadline</span>
+                <span className="font-medium">
+                  {project.deadline ? new Date(project.deadline).toLocaleDateString() : 'Not set'}
+                </span>
               </div>
-              <div className="flex items-start gap-4">
-                <div className="h-2 w-2 rounded-full bg-muted mt-2" />
-                <div className="flex-1">
-                  <p className="font-medium">Expected Completion</p>
-                  <p className="text-sm text-muted-foreground">
-                    {new Date(project.endDate).toLocaleDateString()}
-                  </p>
+              {project.start_date && project.deadline && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Duration</span>
+                  <span className="font-medium">
+                    {Math.ceil((new Date(project.deadline).getTime() - new Date(project.start_date).getTime()) / (1000 * 60 * 60 * 24))} days
+                  </span>
                 </div>
-              </div>
+              )}
             </div>
           </Card>
 
           <Card className="p-6">
-            <h3 className="font-semibold mb-4">Project Details</h3>
+            <h3 className="text-lg font-semibold mb-4">Project Details</h3>
             <div className="space-y-4">
-              <div>
-                <Label className="text-sm text-muted-foreground">Status</Label>
-                <p className="font-medium capitalize">{project.status.replace('-', ' ')}</p>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <Badge variant="outline">{project.status}</Badge>
               </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Budget Allocation</Label>
-                <p className="font-medium">${project.budget.toLocaleString()}</p>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Priority</span>
+                <Badge variant="outline">{project.priority}</Badge>
               </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Duration</Label>
-                <p className="font-medium">
-                  {Math.ceil((new Date(project.endDate).getTime() - new Date(project.startDate).getTime()) / (1000 * 60 * 60 * 24))} days
-                </p>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Budget</span>
+                <span className="font-medium">${project.budget?.toLocaleString() || 0}</span>
               </div>
             </div>
           </Card>
@@ -199,9 +209,5 @@ const ProjectDetail = () => {
     </MainLayout>
   );
 };
-
-const Label = ({ className, children }: { className?: string; children: React.ReactNode }) => (
-  <div className={className}>{children}</div>
-);
 
 export default ProjectDetail;

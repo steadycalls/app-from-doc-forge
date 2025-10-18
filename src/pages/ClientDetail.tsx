@@ -5,51 +5,86 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Mail, Phone, Globe, MapPin, Edit, Calendar, FolderKanban, TrendingUp } from 'lucide-react';
-import { storage, STORAGE_KEYS } from '@/lib/storage';
+import { ArrowLeft, Mail, Phone, Globe, MapPin, Edit, Calendar, FolderKanban, TrendingUp, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface Client {
   id: string;
-  name: string;
+  company_name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   phone: string;
-  company: string;
-  website?: string;
   address?: string;
-  status: 'active' | 'inactive' | 'pending';
-  createdAt: string;
+  status: 'active' | 'inactive' | 'lead';
+  created_at: string;
 }
 
 const ClientDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentOrganization } = useOrganization();
   const [client, setClient] = useState<Client | null>(null);
   const [projects, setProjects] = useState<any[]>([]);
   const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const clients = (storage.get(STORAGE_KEYS.CLIENTS) || []) as Client[];
-    const foundClient = clients.find((c: Client) => c.id === id);
-    
-    if (!foundClient) {
-      toast.error('Client not found');
-      navigate('/clients');
-      return;
-    }
-    
-    setClient(foundClient);
+    const fetchData = async () => {
+      if (!currentOrganization || !id) return;
+      
+      setIsLoading(true);
 
-    // Load related projects
-    const allProjects = (storage.get(STORAGE_KEYS.PROJECTS) || []) as any[];
-    const clientProjects = allProjects.filter((p: any) => p.clientId === id);
-    setProjects(clientProjects);
+      // Fetch client
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', id)
+        .eq('organization_id', currentOrganization.id)
+        .single();
 
-    // Load related opportunities
-    const allOpportunities = (storage.get(STORAGE_KEYS.OPPORTUNITIES) || []) as any[];
-    const clientOpportunities = allOpportunities.filter((o: any) => o.clientId === id);
-    setOpportunities(clientOpportunities);
-  }, [id, navigate]);
+      if (clientError) {
+        toast.error('Client not found');
+        navigate('/clients');
+        return;
+      }
+
+      setClient(clientData);
+
+      // Fetch related projects
+      const { data: projectsData } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('client_id', id)
+        .eq('organization_id', currentOrganization.id);
+
+      setProjects(projectsData || []);
+
+      // Fetch related opportunities
+      const { data: opportunitiesData } = await supabase
+        .from('opportunities')
+        .select('*')
+        .eq('client_id', id)
+        .eq('organization_id', currentOrganization.id);
+
+      setOpportunities(opportunitiesData || []);
+      setIsLoading(false);
+    };
+
+    fetchData();
+  }, [id, currentOrganization, navigate]);
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (!client) {
     return null;
@@ -67,8 +102,10 @@ const ClientDetail = () => {
 
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">{client.name}</h1>
-            <p className="text-lg text-muted-foreground">{client.company}</p>
+            <h1 className="text-3xl font-bold mb-2">{client.company_name}</h1>
+            <p className="text-lg text-muted-foreground">
+              {client.first_name} {client.last_name}
+            </p>
           </div>
           <div className="flex gap-2">
             <Badge variant={
@@ -77,7 +114,7 @@ const ClientDetail = () => {
             }>
               {client.status}
             </Badge>
-            <Button onClick={() => navigate(`/clients`)}>
+            <Button onClick={() => navigate('/clients')}>
               <Edit className="h-4 w-4 mr-2" />
               Edit Client
             </Button>
@@ -93,23 +130,13 @@ const ClientDetail = () => {
             <p className="text-sm">{client.email}</p>
           </Card>
           
-          <Card className="p-6">
-            <div className="flex items-center gap-3 text-muted-foreground mb-2">
-              <Phone className="h-5 w-5" />
-              <span className="text-sm font-medium">Phone</span>
-            </div>
-            <p className="text-sm">{client.phone}</p>
-          </Card>
-
-          {client.website && (
+          {client.phone && (
             <Card className="p-6">
               <div className="flex items-center gap-3 text-muted-foreground mb-2">
-                <Globe className="h-5 w-5" />
-                <span className="text-sm font-medium">Website</span>
+                <Phone className="h-5 w-5" />
+                <span className="text-sm font-medium">Phone</span>
               </div>
-              <a href={client.website} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-                {client.website}
-              </a>
+              <p className="text-sm">{client.phone}</p>
             </Card>
           )}
 
@@ -128,7 +155,7 @@ const ClientDetail = () => {
               <Calendar className="h-5 w-5" />
               <span className="text-sm font-medium">Created</span>
             </div>
-            <p className="text-sm">{new Date(client.createdAt).toLocaleDateString()}</p>
+            <p className="text-sm">{new Date(client.created_at).toLocaleDateString()}</p>
           </Card>
         </div>
 
@@ -186,7 +213,7 @@ const ClientDetail = () => {
                     onClick={() => navigate(`/opportunities/${opp.id}`)}>
                     <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="font-semibold mb-2">{opp.title}</h3>
+                        <h3 className="font-semibold mb-2">{opp.name}</h3>
                         <p className="text-sm text-muted-foreground mb-2">{opp.description}</p>
                         <Badge variant="outline">{opp.stage}</Badge>
                       </div>
